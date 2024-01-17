@@ -1,0 +1,4 @@
+* i2c device support
+* or just use uart instead of i2c. lol
+* yeah uart print output to test it
+* fuuuuck current sensing machine broke
