@@ -5,8 +5,7 @@
 #include "sam/sercom_usart.h"
 #include "sam/pinmux.h"
 #include "sam/serial_number.h"
-
-#include "tusb.h"
+#include "sam/adc.h"
 
 /* pa00-01 are i2c */
 /* pa02 - pa08, pb08,09 are isense */
@@ -37,7 +36,8 @@ const unsigned int PORT4_ENABLE_B = 15;
 
 const unsigned int LED1 = 10; // port b
 const unsigned int LED2 = 11; // port b
-const unsigned int LED3 = 22;
+const unsigned int LED3 = 22; // port a
+const unsigned int LED4 = 23; // porta
 
 const unsigned int port_gpios[] = {
 	PORT1_ENABLE_A,
@@ -69,8 +69,8 @@ extern "C" void SysTick_Handler (void)
 	system_ticks++;
 	if((system_ticks % 5000) == 0) {
 		port_set_value(PORT_A, LED3, value);
-		port_set_value(PORT_A, PORT1_ENABLE_A, value);
-		port_set_value(PORT_A, PORT1_ENABLE_B, value);
+		//port_set_value(PORT_A, PORT1_ENABLE_A, value);
+		//port_set_value(PORT_A, PORT1_ENABLE_B, value);
 		value = !value;
 	}
 }
@@ -102,6 +102,57 @@ int main() {
 	port_set_direction(PORT_A, LED3, true);
 	port_set_value(PORT_A, LED3, true);
 
-	while(true) { asm(""); }
+	port_set_direction(PORT_A, LED4, true);
+	port_set_value(PORT_A, LED4, true);
+
+
+	// sercom setup
+	port_set_function(PORT_A, 0, 3);
+	port_set_function(PORT_A, 1, 3);
+	port_set_pmux_enable(PORT_A, 0, true);
+	port_set_pmux_enable(PORT_A, 1, true);
+
+	// enable port1 a
+	port_set_value(PORT_A, PORT1_ENABLE_A, true);
+	port_set_value(PORT_A, PORT1_ENABLE_B, true);
+
+	// http://9net.org/screenshots/1709135387.png
+	// eth_rst
+	port_set_direction(PORT_A, 21, true);
+	port_set_value(PORT_A, 21, true);
+
+	SercomUart<1> sercom;
+	sercom.init(0, 1); // sercom[0] used for tx, sercom[1] used for rx
+
+	ADCClass adc;
+	adc.init(4, 1);
+	adc.select(0);
+
+	uint32_t last_system_tick = 0;
+	bool led = false;
+	while(true) {
+		if((system_ticks % 100) == 0 && system_ticks != last_system_tick) {
+			last_system_tick = system_ticks;
+
+			uint16_t values[8] = {0};
+			adc.select(0);
+			adc.read_with_input_scan(values, 8);
+
+			char buff[128];
+			for(int i = 0; i < 8; i++) { 
+				snprintf(buff, 128, "adc readout %i: %i\r\n", i, values[i]);
+				sercom.puts(buff);
+			}
+
+			adc.select(11);
+			uint16_t vbus = adc.read();
+			snprintf(buff, 128, "vbus adc readout %i\r\n", vbus);
+			sercom.puts(buff);
+
+			port_set_value(PORT_A, LED4, led);
+			led=!led;
+		}
+	}
+
 	return 0;
 }
