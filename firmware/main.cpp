@@ -7,6 +7,10 @@
 #include "sam/serial_number.h"
 #include "sam/adc.h"
 
+#include "W5500/W5500.hpp"
+#include "W5500/Protocols/DHCP.hpp"
+#include "EtherBus.hpp"
+
 /* pa00-01 are i2c */
 /* pa02 - pa08, pb08,09 are isense */
 /* pb03 is vsense */
@@ -116,17 +120,52 @@ int main() {
 	port_set_value(PORT_A, PORT1_ENABLE_A, true);
 	port_set_value(PORT_A, PORT1_ENABLE_B, true);
 
-	// http://9net.org/screenshots/1709135387.png
-	// eth_rst
-	port_set_direction(PORT_A, 21, true);
-	port_set_value(PORT_A, 21, true);
-
 	SercomUart<1> sercom;
 	sercom.init(0, 1); // sercom[0] used for tx, sercom[1] used for rx
 
 	ADCClass adc;
 	adc.init(4, 1);
 	adc.select(0);
+
+	// http://9net.org/screenshots/1709135387.png
+	// ethernet
+
+	const int ETH_MOSI = 16;
+	const int ETH_CLK = 17;
+	const int ETH_CS = 18;
+	const int ETH_MISO = 19;
+	const int ETH_INT = 21;
+	const int ETH_RST = 21;
+
+	port_set_direction(PORT_A, ETH_INT, false);
+	port_set_direction(PORT_A, ETH_RST, true);
+	port_set_value(PORT_A, ETH_RST, true);
+
+	port_set_function(PORT_A, ETH_CLK, 3); // sercom alt, sercom 3
+	port_set_function(PORT_A, ETH_MISO, 3);
+	port_set_function(PORT_A, ETH_MOSI, 3);
+	port_set_pmux_enable(PORT_A, ETH_CLK, true);
+	port_set_pmux_enable(PORT_A, ETH_MISO, true);
+	port_set_pmux_enable(PORT_A, ETH_MOSI, true);
+
+	// Create an instance of the bus, passing in the relevant IOs
+    EtherBus<3> _w5500_bus{3, 0, PORT_A, ETH_CS};
+    // Use that bus to create a drvier
+    W5500::W5500 _tcpip{_w5500_bus};
+
+    // Initialize the bus
+    _tcpip.init();
+    // Ensure the IC has been reset to an initial state
+    _tcpip.reset();
+
+
+    // We also need a MAC address. Since our PRNG is seeded by the chip ID, this
+    // should be a unique value but stable across restarts.
+    uint8_t mac[6];
+    for (int i = 0; i < 6; i++) {
+        mac[i] = _w5500_bus.random() & 0xFF;
+    }
+    _tcpip.set_mac(mac);
 
 	uint32_t last_system_tick = 0;
 	bool led = false;
@@ -137,17 +176,16 @@ int main() {
 			uint16_t values[8] = {0};
 			adc.select(0);
 			adc.read_with_input_scan(values, 8);
-
+			printf("\033[H");
 			char buff[128];
 			for(int i = 0; i < 8; i++) { 
-				snprintf(buff, 128, "adc readout %i: %i\r\n", i, values[i]);
-				sercom.puts(buff);
+				printf("adc readout %i: %i        \r\n", i, values[i]);
 			}
 
 			adc.select(11);
 			uint16_t vbus = adc.read();
-			snprintf(buff, 128, "vbus adc readout %i\r\n", vbus);
-			sercom.puts(buff);
+			printf(buff, "vbus adc readout %i         \r\n", vbus);
+			printf("link up: %s    \r\n", _tcpip.link_up() ? "true" : "false");
 
 			port_set_value(PORT_A, LED4, led);
 			led=!led;
