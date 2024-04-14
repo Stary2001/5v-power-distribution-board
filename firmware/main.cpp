@@ -3,13 +3,12 @@
 #include "sam/bod.h"
 #include "sam/clock.h"
 #include "sam/sercom_usart.h"
+#include "sam/sercom_spi.h"
 #include "sam/pinmux.h"
 #include "sam/serial_number.h"
 #include "sam/adc.h"
 
-#include "W5500/W5500.hpp"
-#include "W5500/Protocols/DHCP.hpp"
-#include "EtherBus.hpp"
+#include "mongoose.h"
 
 /* pa00-01 are i2c */
 /* pa02 - pa08, pb08,09 are isense */
@@ -79,6 +78,8 @@ extern "C" void SysTick_Handler (void)
 	}
 }
 
+ 
+
 int main() {
 	clock_switch_to_8mhz();
 	bod_init();
@@ -137,6 +138,10 @@ int main() {
 	const int ETH_INT = 21;
 	const int ETH_RST = 21;
 
+
+	port_set_value(ETH_CS, true);
+	port_set_direction(ETH_CS, true);
+
 	port_set_direction(PORT_A, ETH_INT, false);
 	port_set_direction(PORT_A, ETH_RST, true);
 	port_set_value(PORT_A, ETH_RST, true);
@@ -148,24 +153,22 @@ int main() {
 	port_set_pmux_enable(PORT_A, ETH_MISO, true);
 	port_set_pmux_enable(PORT_A, ETH_MOSI, true);
 
-	// Create an instance of the bus, passing in the relevant IOs
-    EtherBus<3> _w5500_bus{3, 0, PORT_A, ETH_CS};
-    // Use that bus to create a drvier
-    W5500::W5500 _tcpip{_w5500_bus};
+	SercomSPI<3> sercom;
 
-    // Initialize the bus
-    _tcpip.init();
-    // Ensure the IC has been reset to an initial state
-    _tcpip.reset();
+	struct mg_tcpip_spi spi = {
+		NULL,                                               // SPI data
+		[](void *) { port_set_value(PORT_A, ETH_CS, false); },          // begin transation
+		[](void *) { port_set_value(PORT_A, ETH_CS, true); },         // end transaction
+		[](void *, uint8_t c) {  },  // execute transaction
+	};
 
+	struct mg_mgr mgr;  // Mongoose event manager
+	struct mg_tcpip_if mif = {.mac = {2, 0, 1, 2, 3, 5}};  // network interface
+    mg_mgr_init(&mgr);
 
-    // We also need a MAC address. Since our PRNG is seeded by the chip ID, this
-    // should be a unique value but stable across restarts.
-    uint8_t mac[6];
-    for (int i = 0; i < 6; i++) {
-        mac[i] = _w5500_bus.random() & 0xFF;
-    }
-    _tcpip.set_mac(mac);
+	mif.driver = &mg_tcpip_driver_w5500;
+	mif.driver_data = &spi;
+	mg_tcpip_init(&mgr, &mif);
 
 	uint32_t last_system_tick = 0;
 	bool led = false;
@@ -185,7 +188,6 @@ int main() {
 			adc.select(11);
 			uint16_t vbus = adc.read();
 			printf(buff, "vbus adc readout %i         \r\n", vbus);
-			printf("link up: %s    \r\n", _tcpip.link_up() ? "true" : "false");
 
 			port_set_value(PORT_A, LED4, led);
 			led=!led;

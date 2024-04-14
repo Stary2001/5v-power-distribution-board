@@ -10,9 +10,9 @@ main_exe = executable('firmware.elf',
 	'main.cpp',
 	'mongoose/mongoose.c',
 
-	c_args: sam_project.get_variable('samd_defines') + ['-DMG_ARCH=MG_ARCH_NEWLIB'],
-	cpp_args: sam_project.get_variable('samd_defines') + ['-DMG_ARCH=MG_ARCH_NEWLIB'] + ['-fno-use-cxa-atexit'],
-	include_directories: [ sam_project.get_variable('our_headers'), sam_project.get_variable('cmsis_headers'), sam_project.get_variable('samd_headers'), 'w5500/include' ],
+	c_args: sam_project.get_variable('samd_defines'),
+	cpp_args: sam_project.get_variable('samd_defines') + ['-fno-use-cxa-atexit'],
+	include_directories: [ sam_project.get_variable('our_headers'), sam_project.get_variable('cmsis_headers'), sam_project.get_variable('samd_headers'), 'mongoose' ],
 	link_whole: sam_library,
 	link_args: [
 		linker_script_flags
