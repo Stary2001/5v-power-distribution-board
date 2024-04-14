@@ -1,3 +1,0 @@
-[submodule "firmware/w5500"]
-	path = firmware/w5500
-	url = https://github.com/rschlaikjer/w5500.git
