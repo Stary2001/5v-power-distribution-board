@@ -11,4 +11,4 @@
 #define MG_ENABLE_TCPIP 1
 #define MG_ENABLE_DRIVER_W5500 1
 #define mkdir(a, b) (-1)
-#define MG_IO_SIZE 512
+#define MG_IO_SIZE 128
